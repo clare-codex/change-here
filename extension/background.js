@@ -1,15 +1,26 @@
-function send(tab, type) {
+// localhost 由 manifest content_scripts 自动注入；
+// 其他站点（自家产品线上版等）在用户点击图标时靠 activeTab + scripting 按需注入。
+async function ensureAndSend(tab, type) {
   if (!tab || tab.id == null) return
-  chrome.tabs.sendMessage(tab.id, { type }).catch(() => {
-    // 页面不在 localhost matches 内，或 content script 未注入：忽略
-  })
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type })
+  } catch {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] })
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['main.js'], world: 'MAIN' })
+      await chrome.tabs.sendMessage(tab.id, { type })
+    } catch {
+      // chrome:// 等不可注入页面，或快捷键在非 localhost 页面首次使用
+      //（activeTab 只在点击图标时授予）：忽略
+    }
+  }
 }
 
-chrome.action.onClicked.addListener((tab) => send(tab, 'changehere:toggle'))
+chrome.action.onClicked.addListener((tab) => ensureAndSend(tab, 'changehere:toggle'))
 
 chrome.commands.onCommand.addListener((command, tab) => {
-  if (command === 'toggle-picker') send(tab, 'changehere:toggle')
-  if (command === 'locate-source') send(tab, 'changehere:locate')
+  if (command === 'toggle-picker') ensureAndSend(tab, 'changehere:toggle')
+  if (command === 'locate-source') ensureAndSend(tab, 'changehere:locate')
 })
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

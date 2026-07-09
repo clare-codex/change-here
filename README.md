@@ -63,6 +63,17 @@ export default defineConfig({
 - **当前样式 / 组件 props**：agent 看不到浏览器，这两项补上「现状」——props 由 MAIN world 脚本从 React fiber 读取
 - **截图**：元素区域自动裁剪存到 `下载目录/changehere/`，markdown 里带绝对路径，Claude Code 等 agent 可直接读图
 
+### 生产页面（无 vite 插件也能用）
+
+在任意站点（自家产品线上版等）点击扩展图标即可选取——`activeTab` 授权按需注入，无需预先配置。拿不到 `data-ch` 时自动降级为**检索线索**模式，输出 agent 能在源码里 grep 到的稳定锚点：
+
+- 元素直接文本、`id`、`data-testid` / `aria-label` 等属性
+- 类名（自动滤除 `css-1x2y3z` 这类 CSS-in-JS 哈希类，保留 Tailwind / 语义类）
+- 最近的带 `data-testid` / `id` 的祖先
+- React 组件 props（生产构建里 props 的 key 不会被压缩，是最强定位线索；组件名被压缩时会标注）
+
+注意：非 localhost 页面首次使用必须**点图标**（快捷键不授予 activeTab）。
+
 ### 反向定位（agent → 页面）
 
 agent 改完代码后验收用：按 `Alt+Shift+L`，粘贴源码位置（`src/App.jsx:9`，整行 markdown 也行，只给文件名则匹配整个文件），`Enter` 后页面上所有来自该行的元素粉色脉冲高亮并滚动到第一个。`Esc` 关闭。

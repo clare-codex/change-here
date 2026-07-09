@@ -3,6 +3,10 @@
 //   以 markdown 形式复制到剪贴板
 // - 反向定位：粘贴 file:line，高亮页面上来自该行的所有元素
 (() => {
+  // localhost 走 manifest 自动注入，其他站点走 background 按需注入，防止重复执行
+  if (window.__changehereLoaded) return
+  window.__changehereLoaded = true
+
   let active = false
   let overlay = null
   let card = null
@@ -138,7 +142,8 @@
       el('span', 'ch-comp', `<${info?.comp || target.tagName.toLowerCase()}>`),
       info
         ? el('span', 'ch-file', `${info.file}:${info.line}`)
-        : el('span', 'ch-file ch-warn', '未接入 vite-plugin-changehere')
+        : el('span', 'ch-file ch-warn',
+            envOf() === 'vite-dev' ? '未接入 vite-plugin-changehere' : '生产模式 · 输出检索线索')
     )
     const row2 = el('div', 'ch-row2')
     row2.append(
@@ -247,6 +252,55 @@
     return out.join('; ')
   }
 
+  // 页面环境：已注入 data-ch / vite dev 但没装插件 / 生产构建
+  function envOf() {
+    if (document.querySelector('[data-ch]')) return 'tagged'
+    if (document.querySelector('script[src*="/@vite/client"]')) return 'vite-dev'
+    return 'prod'
+  }
+
+  // 生产页面拿不到源码位置时，提取能在源码里 grep 到的稳定锚点
+  const ATTR_CLUES = ['data-testid', 'data-test', 'data-cy', 'aria-label', 'name', 'placeholder', 'alt', 'role', 'href']
+
+  // CSS-in-JS / CSS Modules 哈希类对 grep 无用，滤掉
+  function looksHashed(cls) {
+    if (/^(css|sc|jss|jsx|emotion|svelte|chakra)-/.test(cls)) return true
+    const tail = cls.split(/[-_]/).pop()
+    return /^[0-9a-zA-Z]{5,}$/.test(tail) && /\d/.test(tail) && /[a-zA-Z]/.test(tail)
+  }
+
+  function grepClues(target) {
+    const clues = []
+    const ownText = [...target.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent.trim())
+      .join(' ')
+      .trim()
+    if (ownText) clues.push(`文本: "${ownText.slice(0, 60)}"`)
+    if (target.id) clues.push(`id: \`${target.id}\``)
+    for (const a of ATTR_CLUES) {
+      const v = target.getAttribute(a)
+      if (v) clues.push(`${a}: \`${v.slice(0, 80)}\``)
+    }
+    const classes = [...target.classList]
+    const real = classes.filter((c) => !looksHashed(c))
+    const hashed = classes.length - real.length
+    if (real.length) {
+      clues.push(`类名: \`${real.join(' ')}\`${hashed ? `（另滤除 ${hashed} 个哈希类）` : ''}`)
+    }
+    // 最近的带锚点祖先，帮 agent 缩小范围
+    let node = target.parentElement
+    for (let i = 0; node && i < 8; i++, node = node.parentElement) {
+      const testid = node.getAttribute('data-testid')
+      const anchor = testid ? `[data-testid="${testid}"]` : node.id ? `#${node.id}` : null
+      if (anchor) {
+        clues.push(`锚点祖先: \`<${node.tagName.toLowerCase()}>\` \`${anchor}\``)
+        break
+      }
+    }
+    return clues
+  }
+
   // 通过 MAIN world 的 main.js 读 React fiber（isolated world 读不到）
   function fiberInfo(target) {
     return new Promise((resolve) => {
@@ -301,7 +355,19 @@
     if (src) {
       lines.push(`**源码位置**: ${src.file}:${src.line}:${src.col}${src.comp ? `（组件 <${src.comp}>）` : ''}`)
     } else {
-      lines.push('**源码位置**: 未知（该元素无 data-ch 属性，目标项目可能未启用 vite-plugin-changehere）')
+      const env = envOf()
+      lines.push(
+        env === 'vite-dev'
+          ? '**源码位置**: 未知（vite dev 页面，未接入 vite-plugin-changehere）'
+          : env === 'tagged'
+            ? '**源码位置**: 未知（页面已接入插件，但该元素无 data-ch，可能来自第三方组件库）'
+            : '**源码位置**: 未知（生产构建）'
+      )
+      const clues = grepClues(target)
+      if (clues.length) {
+        lines.push('**检索线索**（供 agent 在源码里 grep）:')
+        for (const c of clues) lines.push('- ' + c)
+      }
     }
     if (chain.length > 1) {
       lines.push(
@@ -316,7 +382,11 @@
     if (fiber && fiber.props) {
       let json = JSON.stringify(fiber.props, null, 2)
       if (json.length > 1200) json = json.slice(0, 1200) + '\n…'
-      lines.push(`**组件 props**（<${fiber.component}>）:`, '```json', json, '```')
+      const minified = /^[a-zA-Z$_][a-zA-Z0-9$_]{0,2}$/.test(fiber.component)
+      lines.push(
+        `**组件 props**（<${fiber.component}>${minified ? '，组件名已被构建压缩，以 props 为准' : ''}）:`,
+        '```json', json, '```'
+      )
     }
     if (shot) lines.push(`**截图**: ${shot}`)
     lines.push('', '**修改意图**: （在此填写你想怎么改）')

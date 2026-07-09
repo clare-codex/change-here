@@ -6,7 +6,7 @@ export default function App() {
       <h1>改这里 playground</h1>
       <p className="intro">开启选取模式后点击任意元素测试。</p>
       <Card title="第一张卡片">
-        <button className="btn primary">提交</button>
+        <button className="btn primary css-1x2y3z" data-testid="submit-btn">提交</button>
       </Card>
       <Card title="第二张卡片">
         <ul>

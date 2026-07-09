@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev", "--workspace", "changehere-example", "--", "--port", "5199", "--strictPort"],
       "port": 5199,
       "autoPort": false
+    },
+    {
+      "name": "example-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--workspace", "changehere-example", "--", "--port", "4199", "--strictPort"],
+      "port": 4199,
+      "autoPort": false
     }
   ]
 }

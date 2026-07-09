@@ -9,7 +9,7 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["downloads", "clipboardWrite"],
+  "permissions": ["downloads", "clipboardWrite", "activeTab", "scripting"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "content_scripts": [
     {

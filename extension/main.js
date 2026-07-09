@@ -2,6 +2,9 @@
 // content script 在 isolated world 里读不到 React fiber，
 // 由这里代取「最近的函数/类组件 + 其 props」，通过 CustomEvent 传回。
 (() => {
+  if (window.__changehereMain) return
+  window.__changehereMain = true
+
   window.addEventListener('changehere:req', () => {
     let payload = null
     try {
