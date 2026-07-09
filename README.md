@@ -38,6 +38,9 @@ export default defineConfig({
 1. 打开本地 dev 页面（`http://localhost:*`）
 2. 点击工具栏「改这里」图标（或 `Alt+Shift+E`）进入选取模式
 3. 鼠标悬停高亮 + 显示 `<组件> 文件:行`，点击即复制、自动退出；`Esc` 取消
+4. **Alt+点击** 额外把元素截图存到 `下载目录/changehere/` 并在 markdown 里附路径（普通点击不截图、不触发下载）
+
+> 截图走浏览器下载。如果 Chrome 开了「下载前询问每个文件的保存位置」，Alt+点击会弹另存为；想静默保存就在 `chrome://settings/downloads` 关掉该选项。
 
 复制内容示例：
 

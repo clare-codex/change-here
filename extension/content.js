@@ -148,6 +148,8 @@
     const row2 = el('div', 'ch-row2')
     row2.append(
       `${Math.round(r.width)}×${Math.round(r.height)}　点击复制　`,
+      el('span', 'ch-kbd', 'Alt+点击'),
+      ' 附截图　',
       el('span', 'ch-kbd', 'Esc'),
       ' 退出'
     )
@@ -165,20 +167,25 @@
     if (!current) return
     const target = current
     const rect = target.getBoundingClientRect()
+    const wantShot = e.altKey // 截图会走下载（可能弹另存为），只在 Alt+点击 时做
     deactivate()
 
-    // 等两帧确保高亮框已消失，截图不带遮罩（rAF 可能被节流，超时兜底）
-    await new Promise((resolve) => {
-      let done = false
-      const fin = () => { if (!done) { done = true; resolve() } }
-      requestAnimationFrame(() => requestAnimationFrame(fin))
-      setTimeout(fin, 150)
-    })
-    const [fiber, shot] = await Promise.all([fiberInfo(target), requestCapture(rect)])
+    let shotPromise = Promise.resolve(null)
+    if (wantShot) {
+      // 等两帧确保高亮框已消失，截图不带遮罩（rAF 可能被节流，超时兜底）
+      await new Promise((resolve) => {
+        let done = false
+        const fin = () => { if (!done) { done = true; resolve() } }
+        requestAnimationFrame(() => requestAnimationFrame(fin))
+        setTimeout(fin, 150)
+      })
+      shotPromise = requestCapture(rect)
+    }
+    const [fiber, shot] = await Promise.all([fiberInfo(target), shotPromise])
 
     const md = buildMarkdown(target, rect, fiber, shot)
     copy(md).then(
-      () => toast('已复制元素信息' + (shot ? '（含截图）' : ''), null, 'ok'),
+      () => toast('已复制元素信息' + (shot ? '（截图已存）' : ''), null, 'ok'),
       () => toast('复制失败', null, 'err')
     )
   }
