@@ -1,0 +1,8 @@
+{
+  "name": "changehere",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "example"
+  ]
+}

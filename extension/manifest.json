@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "改这里 ChangeHere",
+  "version": "0.2.0",
+  "description": "选取本地 React dev 页面元素，复制源码位置等结构化信息给 coding agent：指着页面说「改这里」",
+  "action": {
+    "default_title": "改这里：切换选取模式"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["downloads", "clipboardWrite"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["main.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ],
+  "commands": {
+    "toggle-picker": {
+      "suggested_key": { "default": "Alt+Shift+E" },
+      "description": "切换选取模式"
+    },
+    "locate-source": {
+      "suggested_key": { "default": "Alt+Shift+L" },
+      "description": "反向定位：源码位置 → 页面元素"
+    }
+  }
+}
