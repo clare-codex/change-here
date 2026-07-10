@@ -41,10 +41,10 @@ export default function changeHere() {
           /^[a-z]/.test(node.name.name)
         ) {
           const { line, column } = node.loc.start
-          s.appendLeft(
-            node.name.end,
-            ` data-ch="${comp}@${rel}:${line}:${column + 1}"`
-          )
+          // 注在最后一个属性之后，保证 data-ch 不被 {...props} 覆盖
+          const attrs = node.attributes
+          const insertAt = attrs.length ? attrs[attrs.length - 1].end : node.name.end
+          s.appendLeft(insertAt, ` data-ch="${comp}@${rel}:${line}:${column + 1}"`)
           changed = true
         }
       })
@@ -58,18 +58,22 @@ export default function changeHere() {
 /** 取节点声明的组件名（大写开头的函数/类/变量），用于 JSX 归属 */
 function componentNameOf(node) {
   if (
-    (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') &&
+    (node.type === 'FunctionDeclaration' ||
+      node.type === 'ClassDeclaration' ||
+      node.type === 'FunctionExpression') &&
     node.id && /^[A-Z]/.test(node.id.name)
   ) {
     return node.id.name
   }
+  // const Card = () => ... / memo(...) / forwardRef(...) / observer(...) 等包装调用
   if (
     node.type === 'VariableDeclarator' &&
     node.id.type === 'Identifier' &&
     /^[A-Z]/.test(node.id.name) &&
     node.init &&
     (node.init.type === 'ArrowFunctionExpression' ||
-      node.init.type === 'FunctionExpression')
+      node.init.type === 'FunctionExpression' ||
+      node.init.type === 'CallExpression')
   ) {
     return node.id.name
   }

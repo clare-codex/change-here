@@ -12,10 +12,12 @@
       if (el) {
         const key = Object.keys(el).find((k) => k.startsWith('__reactFiber$'))
         let fiber = key ? el[key] : null
-        while (fiber && typeof fiber.type !== 'function') fiber = fiber.return
+        let fn = null
+        while (fiber && !(fn = unwrapFn(fiber.type))) fiber = fiber.return
         if (fiber) {
           payload = {
-            component: fiber.type.displayName || fiber.type.name || 'Anonymous',
+            component:
+              fiber.type.displayName || fn.displayName || fn.name || 'Anonymous',
             props: safeClone(fiber.memoizedProps, 3),
           }
         }
@@ -27,6 +29,16 @@
       new CustomEvent('changehere:res', { detail: JSON.stringify(payload) })
     )
   })
+
+  // memo 的 type 是 {type: fn}，forwardRef 是 {render: fn}，可能嵌套；host fiber 的 type 是字符串
+  function unwrapFn(t) {
+    if (typeof t === 'function') return t
+    if (t && typeof t === 'object') {
+      if (t.render) return unwrapFn(t.render)
+      if (t.type) return unwrapFn(t.type)
+    }
+    return null
+  }
 
   function safeClone(val, depth) {
     if (val == null || typeof val === 'boolean' || typeof val === 'number') return val

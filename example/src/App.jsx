@@ -1,4 +1,5 @@
 import Card from './components/Card'
+import { Badge, Chip, FancyInput } from './components/Badge'
 
 export default function App() {
   return (
@@ -13,6 +14,9 @@ export default function App() {
           <li>列表项 A</li>
           <li>列表项 B</li>
         </ul>
+      </Card>
+      <Card title="包装组件测试">
+        <Badge label="memo 组件" /> <Chip text="memo 箭头" /> <FancyInput data-x="1" />
       </Card>
     </div>
   )

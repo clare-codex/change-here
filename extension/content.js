@@ -34,7 +34,7 @@
 .ch-kbd{display:inline-block;background:rgba(255,255,255,.08);border-radius:4px;
   padding:0 4px;color:#b4b4bc;font-family:ui-monospace,Menlo,monospace;font-size:10px;}
 .ch-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);
-  z-index:2147483647;display:flex;align-items:center;gap:8px;
+  z-index:2147483647;display:flex;align-items:center;gap:8px;pointer-events:none;
   background:rgba(24,24,37,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
   border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 16px;
   box-shadow:0 8px 24px rgba(0,0,0,.35);color:#e4e4e7;
@@ -126,7 +126,9 @@
 
   function onMove(e) {
     const target = e.target
-    if (!(target instanceof Element) || target === overlay || target === card) return
+    if (!(target instanceof Element)) return
+    // 自家 UI（toast/定位框等）不可被选取
+    if (target.closest('.ch-overlay,.ch-card,.ch-toast,.ch-locate')) return
     current = target
     const r = target.getBoundingClientRect()
     overlay.style.display = 'block'

@@ -37,10 +37,13 @@ async function captureElement(tab, rect, dpr) {
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' })
   const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob())
   const pad = 8 * dpr
-  const x = Math.max(0, rect.x * dpr - pad)
-  const y = Math.max(0, rect.y * dpr - pad)
-  const w = Math.min(bmp.width - x, rect.w * dpr + pad * 2)
-  const h = Math.min(bmp.height - y, rect.h * dpr + pad * 2)
+  // 元素可能部分出视口：clamp 到 0 后要把被裁掉的量从宽高里扣掉
+  const x0 = rect.x * dpr - pad
+  const y0 = rect.y * dpr - pad
+  const x = Math.max(0, x0)
+  const y = Math.max(0, y0)
+  const w = Math.min(bmp.width - x, rect.w * dpr + pad * 2 - (x - x0))
+  const h = Math.min(bmp.height - y, rect.h * dpr + pad * 2 - (y - y0))
   if (w <= 0 || h <= 0) return null
 
   const canvas = new OffscreenCanvas(w, h)

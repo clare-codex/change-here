@@ -14,7 +14,7 @@
 ### 1. vite 插件（在你的目标项目里）
 
 ```bash
-npm i -D vite-plugin-changehere   # 或先用本地路径: file:../fe-bridge/packages/vite-plugin-changehere
+npm i -D vite-plugin-changehere   # 或先用本地路径: file:../change-here/packages/vite-plugin-changehere
 ```
 
 ```js
@@ -80,6 +80,12 @@ export default defineConfig({
 ### 反向定位（agent → 页面）
 
 agent 改完代码后验收用：按 `Alt+Shift+L`，粘贴源码位置（`src/App.jsx:9`，整行 markdown 也行，只给文件名则匹配整个文件），`Enter` 后页面上所有来自该行的元素粉色脉冲高亮并滚动到第一个。`Esc` 关闭。
+
+## 已知限制
+
+- **iframe 内元素**选不了（未开 `all_frames`，避免跨 frame 消息路由复杂度）
+- 截图依赖图标点击或 localhost host 权限授予的 `captureVisibleTab`；若快捷键激活后 Alt+点击 截图失败，改从工具栏图标进入
+- HMR 后行号即时更新，但**之前复制的行号**可能已过期，重选即可
 
 ## 本地开发
 

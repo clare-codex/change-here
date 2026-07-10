@@ -1,6 +1,13 @@
 {
   "name": "vite-plugin-changehere",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "dev 编译时给 JSX 原生元素注入 data-ch=\"组件@文件:行:列\"，供「改这里 ChangeHere」Chrome 扩展读取",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clare-codex/change-here.git",
+    "directory": "packages/vite-plugin-changehere"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.js"
