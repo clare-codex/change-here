@@ -30,6 +30,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch(() => sendResponse(null))
     return true
   }
+  if (msg && msg.type === 'changehere:selection') {
+    // 转发到本地 MCP bridge；没起 server 就静默失败
+    fetch('http://127.0.0.1:5299/selection', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(msg.payload),
+    }).catch(() => {})
+  }
 })
 
 // 截取可见页面 → 按元素 rect（加 8px 上下文边距）裁剪 → 存到下载目录 changehere/

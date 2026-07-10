@@ -14,6 +14,7 @@
   let styleEl = null
   let locateBox = null
   let hits = []
+  let childStack = [] // ↑ 选父级时记录来路，↓ 原路返回
 
   const CSS = `
 .ch-overlay{position:fixed;z-index:2147483646;pointer-events:none;display:none;
@@ -116,6 +117,18 @@
       e.preventDefault()
       e.stopImmediatePropagation()
       deactivate()
+    } else if (e.key === 'ArrowUp' && current) {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      const p = current.parentElement
+      if (p && p !== document.body && p !== document.documentElement) {
+        childStack.push(current)
+        setCurrent(p)
+      }
+    } else if (e.key === 'ArrowDown' && childStack.length) {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      setCurrent(childStack.pop())
     }
   }
 
@@ -129,6 +142,12 @@
     if (!(target instanceof Element)) return
     // 自家 UI（toast/定位框等）不可被选取
     if (target.closest('.ch-overlay,.ch-card,.ch-toast,.ch-locate')) return
+    if (target === current) return
+    childStack = []
+    setCurrent(target)
+  }
+
+  function setCurrent(target) {
     current = target
     const r = target.getBoundingClientRect()
     overlay.style.display = 'block'
@@ -151,7 +170,9 @@
     row2.append(
       `${Math.round(r.width)}×${Math.round(r.height)}　点击复制　`,
       el('span', 'ch-kbd', 'Alt+点击'),
-      ' 附截图　',
+      ' 截图　',
+      el('span', 'ch-kbd', '↑↓'),
+      ' 层级　',
       el('span', 'ch-kbd', 'Esc'),
       ' 退出'
     )
@@ -190,6 +211,13 @@
       () => toast('已复制元素信息' + (shot ? '（截图已存）' : ''), null, 'ok'),
       () => toast('复制失败', null, 'err')
     )
+    // 同步推给本地 MCP bridge（经 background，规避页面 CSP），没起 server 就静默丢弃
+    try {
+      chrome.runtime.sendMessage(
+        { type: 'changehere:selection', payload: { markdown: md, url: location.href } },
+        () => void chrome.runtime.lastError
+      )
+    } catch {}
   }
 
   // ---------- 数据采集 ----------
@@ -418,11 +446,12 @@
       e.stopPropagation()
       if (e.key === 'Escape') closeLocate()
       if (e.key === 'Enter') {
-        const n = runLocate(input.value.trim())
+        const res = runLocate(input.value.trim())
         hint.textContent =
-          n == null ? '没解析出文件路径，试试 src/xxx.jsx:12 格式'
-          : n === 0 ? '0 个匹配（确认 dev server 在跑、行号未过期）'
-          : `${n} 个匹配 · Esc 关闭`
+          res == null ? '没解析出文件路径，试试 src/xxx.jsx:12 格式'
+          : res.matched.length === 0 ? '0 个匹配（确认 dev server 在跑、文件路径正确）'
+          : res.fallback ? `行号未命中（可能已漂移），按文件匹配 ${res.matched.length} 个，已滚到最近的 :${res.nearest}`
+          : `${res.matched.length} 个匹配 · Esc 关闭`
       }
     })
   }
@@ -438,27 +467,92 @@
     hits = []
   }
 
-  // 从任意文本里抠出 文件路径[:行号]，容忍整行 markdown 粘贴
-  function runLocate(q) {
-    clearHits()
-    const m = /([^\s:*`（()]+\.[jt]sx?)(?::(\d+))?/.exec(q)
-    if (!m) return null
-    const file = m[1].replace(/^\.\//, '')
-    const line = m[2] ? +m[2] : null
-
+  // 匹配来自 file[:line] 的元素；行号 miss（agent 改动后常见漂移）时退化为整文件
+  function matchElements(file, line) {
+    const inFile = []
     for (const node of document.querySelectorAll('[data-ch]')) {
       const info = parseCh(node.getAttribute('data-ch'))
       if (!info) continue
       const fileOk =
         info.file === file || info.file.endsWith('/' + file) || file.endsWith('/' + info.file)
-      if (fileOk && (line == null || info.line === line)) {
-        node.classList.add('ch-hit')
-        hits.push(node)
-      }
+      if (fileOk) inFile.push({ node, line: info.line })
     }
-    hits[0]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    return hits.length
+    let matched = line == null ? inFile : inFile.filter((m) => m.line === line)
+    let fallback = false
+    let nearest = null
+    let scroll = null
+    if (line != null && !matched.length && inFile.length) {
+      fallback = true
+      matched = inFile
+      const best = inFile.reduce((a, b) =>
+        Math.abs(b.line - line) < Math.abs(a.line - line) ? b : a
+      )
+      scroll = best.node
+      nearest = best.line
+    }
+    return { matched, fallback, nearest, scroll: scroll ?? matched[0]?.node ?? null }
   }
+
+  // 从任意文本里抠出 文件路径[:行号]，容忍整行 markdown 粘贴
+  function runLocate(q) {
+    clearHits()
+    const m = /([^\s:*`（()]+\.[jt]sx?)(?::(\d+))?/.exec(q)
+    if (!m) return null
+    const res = matchElements(m[1].replace(/^\.\//, ''), m[2] ? +m[2] : null)
+    for (const { node } of res.matched) {
+      node.classList.add('ch-hit')
+      hits.push(node)
+    }
+    res.scroll?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    return res
+  }
+
+  // ---------- MCP bridge：agent 推送的高亮 ----------
+
+  const BRIDGE = 'http://127.0.0.1:5299'
+  let lastRemoteAt = ''
+
+  function applyRemoteHighlight(cmd) {
+    ensureStyle()
+    clearHits()
+    const res = matchElements(cmd.file, cmd.line ?? null)
+    for (const { node } of res.matched) {
+      node.classList.add('ch-hit')
+      hits.push(node)
+    }
+    res.scroll?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const loc = cmd.file + (cmd.line ? ':' + cmd.line : '')
+    toast(
+      `agent 高亮 ${loc} → ${res.matched.length} 个匹配${res.fallback ? '（行号漂移，退化整文件）' : ''}`,
+      null,
+      res.matched.length ? 'ok' : 'err'
+    )
+    if (hits.length) setTimeout(clearHits, 8000)
+  }
+
+  // 只在本地 dev 页轮询（生产站多半没 data-ch，且要避开严格 CSP 的 connect-src）
+  function startHighlightPoll() {
+    let delay = 3000
+    async function tick() {
+      if (document.visibilityState === 'visible') {
+        try {
+          const cmds = await (await fetch(BRIDGE + '/highlight/pending')).json()
+          delay = 3000
+          const fresh = cmds.filter((c) => c.at > lastRemoteAt)
+          if (fresh.length) {
+            lastRemoteAt = fresh[fresh.length - 1].at
+            applyRemoteHighlight(fresh[fresh.length - 1])
+          }
+        } catch {
+          delay = Math.min(delay * 2, 30000) // server 没起，指数退避
+        }
+      }
+      setTimeout(tick, delay)
+    }
+    setTimeout(tick, 1500)
+  }
+
+  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) startHighlightPoll()
 
   // ---------- 通用 ----------
 

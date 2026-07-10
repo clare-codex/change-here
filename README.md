@@ -38,7 +38,8 @@ export default defineConfig({
 1. 打开本地 dev 页面（`http://localhost:*`）
 2. 点击工具栏「改这里」图标（或 `Alt+Shift+E`）进入选取模式
 3. 鼠标悬停高亮 + 显示 `<组件> 文件:行`，点击即复制、自动退出；`Esc` 取消
-4. **Alt+点击** 额外把元素截图存到 `下载目录/changehere/` 并在 markdown 里附路径（普通点击不截图、不触发下载）
+4. **`↑` / `↓`** 沿 DOM 选父/子层级（悬停常选中太深的节点，如按钮里的 icon）
+5. **Alt+点击** 额外把元素截图存到 `下载目录/changehere/` 并在 markdown 里附路径（普通点击不截图、不触发下载）
 
 > 截图走浏览器下载。如果 Chrome 开了「下载前询问每个文件的保存位置」，Alt+点击会弹另存为；想静默保存就在 `chrome://settings/downloads` 关掉该选项。
 
@@ -80,6 +81,21 @@ export default defineConfig({
 ### 反向定位（agent → 页面）
 
 agent 改完代码后验收用：按 `Alt+Shift+L`，粘贴源码位置（`src/App.jsx:9`，整行 markdown 也行，只给文件名则匹配整个文件），`Enter` 后页面上所有来自该行的元素粉色脉冲高亮并滚动到第一个。`Esc` 关闭。
+
+行号漂移容差：agent 改动后行号常会变，精确行号 miss 时自动退化为整文件匹配，并滚动到行号最接近的元素（提示里会注明）。
+
+### MCP 直连（实验性）
+
+`packages/changehere-mcp` 提供 MCP server，让 agent 跳过剪贴板直连浏览器：
+
+```bash
+claude mcp add changehere -- node /path/to/change-here/packages/changehere-mcp/server.js
+```
+
+- `get_selection`：拉取你最近点选的元素信息——点完元素直接对 agent 说"改我刚选的"
+- `highlight(file, line)`：agent 改完代码后主动高亮页面上的改动位置（本地 dev 页每 3s 轮询）
+
+bridge 监听 `127.0.0.1:5299`（`CHANGEHERE_PORT` 可改）；多个 agent 会话共享第一个实例。扩展侧在 server 未运行时静默降级，不影响剪贴板主流程。HTTP bridge 已联测；MCP 工具层尚未在真实 agent 会话中验证过。
 
 ## 已知限制
 

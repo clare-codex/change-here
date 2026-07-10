@@ -1,0 +1,19 @@
+{
+  "name": "changehere-mcp",
+  "version": "0.1.0",
+  "description": "「改这里 ChangeHere」的 MCP server：agent 直接拉取浏览器选区（get_selection），改完代码反向高亮页面元素（highlight）",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "changehere-mcp": "server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clare-codex/change-here.git",
+    "directory": "packages/changehere-mcp"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.0"
+  }
+}
