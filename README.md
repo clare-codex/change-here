@@ -95,7 +95,9 @@ claude mcp add changehere -- node /path/to/change-here/packages/changehere-mcp/s
 - `get_selection`：拉取你最近点选的元素信息——点完元素直接对 agent 说"改我刚选的"
 - `highlight(file, line)`：agent 改完代码后主动高亮页面上的改动位置（本地 dev 页每 3s 轮询）
 
-bridge 监听 `127.0.0.1:5299`（`CHANGEHERE_PORT` 可改）；多个 agent 会话共享第一个实例。扩展侧在 server 未运行时静默降级，不影响剪贴板主流程。HTTP bridge 已联测；MCP 工具层尚未在真实 agent 会话中验证过。
+bridge 监听 `127.0.0.1:5299`（`CHANGEHERE_PORT` 可改）；多个 agent 会话共享第一个实例（端口被占自动降级为客户端）。扩展侧在 server 未运行时静默降级（指数退避轮询），不影响剪贴板主流程。
+
+已联测：MCP 协议层（tools/list、两个工具调用）、双实例代理、`highlight` → 页面高亮全链路。轮询只在页面可见时进行，后台标签页会暂停。
 
 ## 已知限制
 
