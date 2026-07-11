@@ -7,6 +7,9 @@
   "bin": {
     "changehere-mcp": "server.js"
   },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/clare-codex/change-here.git",

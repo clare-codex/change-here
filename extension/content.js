@@ -509,8 +509,21 @@
 
   // ---------- MCP bridge：agent 推送的高亮 ----------
 
-  const BRIDGE = 'http://127.0.0.1:5299'
   let lastRemoteAt = ''
+
+  function requestPendingHighlights() {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'changehere:highlight-pending' }, (value) => {
+          const error = chrome.runtime.lastError
+          if (error) reject(new Error(error.message))
+          else resolve(Array.isArray(value) ? value : [])
+        })
+      } catch (error) {
+        reject(error)
+      }
+    })
+  }
 
   function applyRemoteHighlight(cmd) {
     ensureStyle()
@@ -536,7 +549,7 @@
     async function tick() {
       if (document.visibilityState === 'visible') {
         try {
-          const cmds = await (await fetch(BRIDGE + '/highlight/pending')).json()
+          const cmds = await requestPendingHighlights()
           delay = 3000
           const fresh = cmds.filter((c) => c.at > lastRemoteAt)
           if (fresh.length) {

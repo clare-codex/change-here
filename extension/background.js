@@ -16,6 +16,30 @@ async function ensureAndSend(tab, type) {
   }
 }
 
+const BRIDGE = 'http://127.0.0.1:5299'
+let bridgeToken = null
+
+async function pairBridge() {
+  const response = await fetch(BRIDGE + '/pair', { method: 'POST' })
+  if (!response.ok) throw new Error('bridge pairing failed')
+  const body = await response.json()
+  if (!body || typeof body.token !== 'string') throw new Error('invalid pairing response')
+  bridgeToken = body.token
+}
+
+async function bridgeFetch(path, options = {}, canRetry = true) {
+  if (!bridgeToken) await pairBridge()
+  const headers = new Headers(options.headers || {})
+  headers.set('authorization', 'Bearer ' + bridgeToken)
+  const response = await fetch(BRIDGE + path, { ...options, headers })
+  if (response.status === 401 && canRetry) {
+    bridgeToken = null
+    await pairBridge()
+    return bridgeFetch(path, options, false)
+  }
+  return response
+}
+
 chrome.action.onClicked.addListener((tab) => ensureAndSend(tab, 'changehere:toggle'))
 
 chrome.commands.onCommand.addListener((command, tab) => {
@@ -31,12 +55,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
   if (msg && msg.type === 'changehere:selection') {
-    // 转发到本地 MCP bridge；没起 server 就静默失败
-    fetch('http://127.0.0.1:5299/selection', {
+    // 只有扩展后台能访问 bridge；网页/content script 不持有配对 token。
+    bridgeFetch('/selection', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(msg.payload),
     }).catch(() => {})
+  }
+  if (msg && msg.type === 'changehere:highlight-pending') {
+    bridgeFetch('/highlight/pending')
+      .then(async (response) => response.ok ? response.json() : [])
+      .then(sendResponse)
+      .catch(() => sendResponse([]))
+    return true
   }
 })
 

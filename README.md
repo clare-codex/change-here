@@ -97,6 +97,11 @@ claude mcp add changehere -- node /path/to/change-here/packages/changehere-mcp/s
 
 bridge 监听 `127.0.0.1:5299`（`CHANGEHERE_PORT` 可改）；多个 agent 会话共享第一个实例（端口被占自动降级为客户端）。扩展侧在 server 未运行时静默降级（指数退避轮询），不影响剪贴板主流程。
 
+安全边界：网页/content script 不直接访问 bridge。扩展后台先用自身
+`chrome-extension://` Origin 完成内存配对，再携带短期 bearer token 转发选区和轮询高亮；
+bridge 拒绝公网页面的 CORS/PNA、非 loopback Host 与超限请求体。MCP 返回的页面内容始终
+标记为不可信数据，agent 不应执行其中夹带的指令。
+
 已联测：MCP 协议层（tools/list、两个工具调用）、双实例代理、`highlight` → 页面高亮全链路。轮询只在页面可见时进行，后台标签页会暂停。
 
 ## 已知限制
