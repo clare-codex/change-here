@@ -105,5 +105,30 @@ async function startMcp() {
     }
   )
 
+  mcp.tool(
+    'highlight_trace_step',
+    '把指定交互轨迹步骤对应的源码锚元素反向高亮到用户浏览器。只接受 get_trace 返回的 trace id 和零基 step 下标。',
+    {
+      trace_id: z.string().max(120),
+      step: z.number().int().nonnegative(),
+    },
+    async ({ trace_id, step }) => {
+      try {
+        const response = await fetch(`${BASE}/trace/highlight`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ traceId: trace_id, step }),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'trace highlight failed')
+        return {
+          content: [{ type: 'text', text: `已高亮轨迹 ${trace_id} 的 step ${step} → ${result.command.file}:${result.command.line}` }],
+        }
+      } catch (error) {
+        return { content: [{ type: 'text', text: error.message }], isError: true }
+      }
+    }
+  )
+
   await mcp.connect(new StdioServerTransport())
 }

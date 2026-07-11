@@ -194,6 +194,9 @@ export function createBridgeServer(options = {}) {
           durationMs: Math.max(0, Math.min(10_000, Number(body.durationMs) || 0)),
           stopReason: String(body.stopReason || 'unknown').slice(0, 40),
           target: body.target ?? null,
+          elementBefore: body.elementBefore ?? null,
+          elementAfter: body.elementAfter ?? null,
+          elementDiff: Array.isArray(body.elementDiff) ? body.elementDiff.slice(0, 100) : [],
           records: body.records.slice(0, 100),
           receivedAt: new Date().toISOString(),
           provenance: {
@@ -214,6 +217,34 @@ export function createBridgeServer(options = {}) {
         latest: state.traces[0] ?? null,
         count: state.traces.length,
       })
+    }
+
+    if (req.method === 'POST' && path === '/trace/highlight') {
+      try {
+        const body = await readJsonBody(req)
+        const trace = state.traces.find((item) => item.id === body?.traceId)
+        const step = Number(body?.step)
+        if (!trace || !Number.isInteger(step) || step < 0 || step >= trace.records.length) {
+          return json(req, res, 404, { error: 'trace step not found' })
+        }
+        const record = trace.records[step]
+        const source = record?.target?.source ?? record?.source ?? trace.target?.source
+        if (!source || typeof source.file !== 'string' || !Number.isFinite(Number(source.line))) {
+          return json(req, res, 422, { error: 'trace step has no source anchor' })
+        }
+        const command = {
+          kind: 'trace-step',
+          traceId: trace.id,
+          step,
+          file: source.file,
+          line: Number(source.line),
+          at: new Date().toISOString(),
+        }
+        state.highlights.push(command)
+        return json(req, res, 200, { ok: true, command })
+      } catch (error) {
+        return json(req, res, error.statusCode || 400, { error: error.message })
+      }
     }
 
     if (req.method === 'POST' && path === '/highlight') {

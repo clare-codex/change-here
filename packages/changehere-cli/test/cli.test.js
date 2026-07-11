@@ -54,6 +54,19 @@ test('posts a parsed source highlight', async () => {
   assert.equal(lines[0], 'Highlighted src/App.jsx:42.')
 })
 
+test('highlights an exact trace step', async () => {
+  const { lines, io } = capture()
+  await runCli(['highlight-trace', 'trace-abc', '3'], {
+    fetch: async (url, options) => {
+      assert.match(url, /\/trace\/highlight$/)
+      assert.deepEqual(JSON.parse(options.body), { traceId: 'trace-abc', step: 3 })
+      return fakeResponse({ command: { file: 'src/Menu.jsx', line: 27 } })
+    },
+    io,
+  })
+  assert.equal(lines[0], 'Highlighted trace trace-abc step 3 at src/Menu.jsx:27.')
+})
+
 test('installs the bundled skill into an agent skill directory', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'changehere-cli-'))
   const { lines, io } = capture()

@@ -95,9 +95,12 @@ claude mcp add changehere -- node /path/to/change-here/packages/changehere-mcp/s
 - `get_selection`：拉取你最近点选的元素信息——点完元素直接对 agent 说"改我刚选的"
 - `highlight(file, line)`：agent 改完代码后主动高亮页面上的改动位置（本地 dev 页每 3s 轮询）
 - `get_trace`：读取最近一次最长 10 秒的交互轨迹（事件 + 按源码位置聚合的 DOM mutation + 运行时错误）
+- `highlight_trace_step(trace_id, step)`：把某条轨迹记录对应的源码锚元素指回页面
 
 录制轨迹：进入选取模式，指向问题交互的起点元素后按 `R`；正常操作页面复现问题，
 再次按 `R` 停止（`Esc` 取消）。轨迹最多记录 100 条摘要，不采集输入值，只记录长度/状态。
+每条轨迹还包含起点元素的 before/after 快照与字段级 `elementDiff`（文本、可见性、几何、
+关键属性和布局样式），便于区分目标元素自身变化与页面噪声。
 
 ### CLI + agent skill
 
@@ -108,6 +111,7 @@ changehere status
 changehere last
 changehere trace last
 changehere highlight src/App.jsx:9
+changehere highlight-trace trace-abc 3
 changehere install-skill .
 ```
 

@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "benchmark:validate": "node scripts/validate-trace-benchmark.mjs",
-    "build:example": "npm run build --workspace changehere-example"
+    "build:example": "npm run build --workspace changehere-example",
+    "test:trace": "node --test tests/trace-diff.test.mjs"
   },
   "workspaces": [
     "packages/*",

@@ -7,6 +7,8 @@
   const MAX_RECORDS = 100
   const MUTATION_WINDOW_MS = 100
   const SAFE_ATTRIBUTE = /^(?:class|style|hidden|disabled|open|checked|selected|aria-[\w-]+|data-state)$/
+  const SNAPSHOT_ATTRIBUTES = ['class', 'hidden', 'disabled', 'open', 'checked', 'selected', 'aria-expanded', 'aria-pressed', 'aria-hidden', 'data-state']
+  const SNAPSHOT_STYLES = ['display', 'position', 'visibility', 'opacity', 'width', 'height', 'transform', 'overflow']
   let session = null
 
   function parseSource(value) {
@@ -44,6 +46,88 @@
     const source = sourceOf(element)
     if (source) summary.source = source
     return summary
+  }
+
+  function snapshotElement(node) {
+    const element = elementOf(node)
+    if (!element?.isConnected) return null
+    const rect = element.getBoundingClientRect()
+    const computed = getComputedStyle(element)
+    const attributes = {}
+    for (const name of SNAPSHOT_ATTRIBUTES) {
+      if (element.hasAttribute(name)) attributes[name] = short(element.getAttribute(name), 160)
+    }
+    const styles = {}
+    for (const name of SNAPSHOT_STYLES) styles[name] = computed.getPropertyValue(name)
+    return {
+      ...elementSummary(element),
+      visible: rect.width > 0 && rect.height > 0 && computed.display !== 'none' && computed.visibility !== 'hidden' && computed.opacity !== '0',
+      rect: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      },
+      attributes,
+      styles,
+    }
+  }
+
+  function diffSnapshots(before, after) {
+    if (!before && !after) return []
+    if (!before) return [{ field: 'element', before: null, after: 'present' }]
+    if (!after) return [{ field: 'element', before: 'present', after: null }]
+    const changes = []
+    if (before.text !== after.text) changes.push({ field: 'text', before: before.text ?? '', after: after.text ?? '' })
+    if (before.visible !== after.visible) changes.push({ field: 'visible', before: before.visible, after: after.visible })
+    for (const name of ['x', 'y', 'width', 'height']) {
+      if (before.rect?.[name] !== after.rect?.[name]) {
+        changes.push({ field: `rect.${name}`, before: before.rect?.[name] ?? null, after: after.rect?.[name] ?? null })
+      }
+    }
+    for (const group of ['attributes', 'styles']) {
+      const keys = new Set([...Object.keys(before[group] || {}), ...Object.keys(after[group] || {})])
+      for (const name of keys) {
+        const oldValue = before[group]?.[name] ?? null
+        const newValue = after[group]?.[name] ?? null
+        if (oldValue !== newValue) changes.push({ field: `${group}.${name}`, before: oldValue, after: newValue })
+      }
+    }
+    return changes
+  }
+
+  function sourceHost(node) {
+    return elementOf(node)?.closest?.('[data-ch]') ?? null
+  }
+
+  function targetIdentity(target) {
+    const host = sourceHost(target)
+    const sourceAttribute = host?.getAttribute('data-ch') || null
+    const matches = sourceAttribute
+      ? [...document.querySelectorAll('[data-ch]')].filter((element) => element.getAttribute('data-ch') === sourceAttribute)
+      : []
+    return {
+      element: target,
+      sourceAttribute,
+      occurrence: host ? Math.max(0, matches.indexOf(host)) : 0,
+      id: elementOf(target)?.id || null,
+      testId: elementOf(target)?.getAttribute?.('data-testid') || null,
+    }
+  }
+
+  function resolveTarget(identity) {
+    if (identity.element?.isConnected) return identity.element
+    if (identity.sourceAttribute) {
+      const matches = [...document.querySelectorAll('[data-ch]')]
+        .filter((element) => element.getAttribute('data-ch') === identity.sourceAttribute)
+      if (matches.length) return matches[Math.min(identity.occurrence, matches.length - 1)]
+    }
+    if (identity.id) return document.getElementById(identity.id)
+    if (identity.testId) {
+      return [...document.querySelectorAll('[data-testid]')]
+        .find((element) => element.getAttribute('data-testid') === identity.testId) ?? null
+    }
+    return null
   }
 
   function eventDetail(event) {
@@ -192,12 +276,15 @@
   function start({ target, onStop } = {}) {
     if (session) return null
     const startedAtPerf = performance.now()
+    const identity = targetIdentity(target)
     session = {
       id: `trace-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
       startedAt: new Date().toISOString(),
       startedAtPerf,
       url: location.href,
       target: elementSummary(target),
+      targetIdentity: identity,
+      elementBefore: snapshotElement(target),
       records: [],
       pendingMutations: new Map(),
       mutationTimer: null,
@@ -212,10 +299,13 @@
 
   function stop(reason = 'manual') {
     if (!session) return null
+    const undeliveredMutations = session.observer.takeRecords()
+    if (undeliveredMutations.length) onMutations(undeliveredMutations)
     flushMutations()
     const activeSession = session
     session = null
     detach(activeSession)
+    const elementAfter = snapshotElement(resolveTarget(activeSession.targetIdentity))
     const trace = {
       version: 1,
       id: activeSession.id,
@@ -224,6 +314,9 @@
       durationMs: Math.min(MAX_DURATION_MS, Math.round(performance.now() - activeSession.startedAtPerf)),
       stopReason: reason,
       target: activeSession.target,
+      elementBefore: activeSession.elementBefore,
+      elementAfter,
+      elementDiff: diffSnapshots(activeSession.elementBefore, elementAfter),
       records: activeSession.records,
     }
     activeSession.onStop?.(trace)
@@ -235,5 +328,6 @@
     stop,
     isRecording: () => Boolean(session),
     limits: { maxDurationMs: MAX_DURATION_MS, maxRecords: MAX_RECORDS },
+    internals: { diffSnapshots },
   }
 })()

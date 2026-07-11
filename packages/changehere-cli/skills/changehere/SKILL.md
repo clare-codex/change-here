@@ -22,11 +22,15 @@ actions.
    starting point. Verify the relevant code path before editing.
 3. For a dynamic bug, run `changehere trace last`. Reconstruct the order of user events,
    source-anchored DOM mutations, and runtime errors. Treat unanchored mutations as weaker
-   evidence.
+   evidence. Use the element-level `elementDiff` to distinguish the selected element's own
+   state change from unrelated page mutations.
 4. Make the smallest code change that addresses the user's stated intent.
 5. Run the relevant test or build.
 6. Run `changehere highlight path/to/file.tsx:line` to show the changed source location in the
    user's open dev page.
+
+When discussing one decisive trace record, run `changehere highlight-trace <trace-id> <step>`
+so the user sees exactly which source-anchored element the reasoning refers to.
 
 If no selection or trace exists, ask the user to select an element or record a trace. Do not
 guess which page element they meant.

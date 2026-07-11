@@ -35,6 +35,7 @@ Usage:
   changehere last
   changehere trace [last]
   changehere highlight <file[:line]>
+  changehere highlight-trace <trace-id> <step>
   changehere install-skill [project-directory]
 
 Environment:
@@ -96,6 +97,21 @@ export async function runCli(args, dependencies = {}) {
       body: JSON.stringify(location),
     })
     output(io, `Highlighted ${location.file}${location.line ? `:${location.line}` : ''}.`)
+    return 0
+  }
+
+  if (command === 'highlight-trace') {
+    const traceId = args[1]
+    const step = Number(args[2])
+    if (!traceId || !Number.isInteger(step) || step < 0) {
+      throw new Error('expected highlight-trace <trace-id> <non-negative-step>')
+    }
+    const result = await requestJson(fetchFn, base, '/trace/highlight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ traceId, step }),
+    })
+    output(io, `Highlighted trace ${traceId} step ${step} at ${result.command.file}:${result.command.line}.`)
     return 0
   }
 

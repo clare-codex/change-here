@@ -94,6 +94,9 @@ test('stores only bounded versioned traces', async () => {
     durationMs: 800,
     stopReason: 'manual',
     target: { tag: 'button', source: { file: 'src/App.jsx', line: 10, column: 3 } },
+    elementBefore: { text: 'Closed', visible: true },
+    elementAfter: { text: 'Open', visible: true },
+    elementDiff: [{ field: 'text', before: 'Closed', after: 'Open' }],
     records: Array.from({ length: 120 }, (_, index) => ({ kind: 'event', type: 'click', atMs: index })),
   }
   const response = await fetch(base + '/trace', {
@@ -106,6 +109,19 @@ test('stores only bounded versioned traces', async () => {
   assert.equal(stored.latest.id, 'trace-test')
   assert.equal(stored.latest.records.length, 100)
   assert.equal(stored.latest.provenance.pageTrust, 'local-dev')
+  assert.deepEqual(stored.latest.elementDiff, [{ field: 'text', before: 'Closed', after: 'Open' }])
+
+  const highlight = await fetch(base + '/trace/highlight', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ traceId: 'trace-test', step: 0 }),
+  })
+  assert.equal(highlight.status, 200)
+  const command = (await highlight.json()).command
+  assert.deepEqual(
+    { kind: command.kind, traceId: command.traceId, step: command.step, file: command.file, line: command.line },
+    { kind: 'trace-step', traceId: 'trace-test', step: 0, file: 'src/App.jsx', line: 10 }
+  )
 })
 
 test('rejects DNS-rebinding Host headers', async () => {

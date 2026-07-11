@@ -594,8 +594,9 @@
     }
     res.scroll?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     const loc = cmd.file + (cmd.line ? ':' + cmd.line : '')
+    const prefix = cmd.kind === 'trace-step' ? `轨迹 ${cmd.traceId} step ${cmd.step}` : 'agent'
     toast(
-      `agent 高亮 ${loc} → ${res.matched.length} 个匹配${res.fallback ? '（行号漂移，退化整文件）' : ''}`,
+      `${prefix} 高亮 ${loc} → ${res.matched.length} 个匹配${res.fallback ? '（行号漂移，退化整文件）' : ''}`,
       null,
       res.matched.length ? 'ok' : 'err'
     )
