@@ -1,6 +1,10 @@
 {
   "name": "changehere",
   "private": true,
+  "scripts": {
+    "benchmark:validate": "node scripts/validate-trace-benchmark.mjs",
+    "build:example": "npm run build --workspace changehere-example"
+  },
   "workspaces": [
     "packages/*",
     "example"
