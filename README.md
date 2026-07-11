@@ -102,6 +102,9 @@ claude mcp add changehere -- node /path/to/change-here/packages/changehere-mcp/s
 每条轨迹还包含起点元素的 before/after 快照与字段级 `elementDiff`（文本、可见性、几何、
 关键属性和布局样式），便于区分目标元素自身变化与页面噪声。
 
+更新扩展代码后，需要先在 `chrome://extensions` 重新加载扩展，再刷新已经打开的业务页面；
+Chrome 不会把新版 content script 自动注入旧标签页。按 `R` 前须先移动鼠标，让目标元素出现紫色高亮框。
+
 ### CLI + agent skill
 
 不想加载 MCP 工具面时可以使用轻量 CLI：

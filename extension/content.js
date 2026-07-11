@@ -100,7 +100,7 @@
     document.addEventListener('mousedown', swallow, true)
     document.addEventListener('mouseup', swallow, true)
     document.addEventListener('keydown', onKey, true)
-    toast('改这里：点击元素复制信息', 'Esc 退出')
+    toast('改这里：点击元素复制信息', '悬停元素后按 R 录轨迹 · Esc 退出')
   }
 
   function deactivate() {
@@ -133,17 +133,26 @@
       e.preventDefault()
       e.stopImmediatePropagation()
       setCurrent(childStack.pop())
-    } else if (e.key.toLowerCase() === 'r' && current) {
+    } else if (isTraceKey(e)) {
       e.preventDefault()
       e.stopImmediatePropagation()
+      if (!current) {
+        toast('请先把鼠标移到轨迹起点元素上', null, 'err')
+        return
+      }
       startTrace(current)
     }
+  }
+
+  // `event.key` 在中文输入法组合态下可能是 Process/Unidentified；物理键位仍是 KeyR。
+  function isTraceKey(e) {
+    return e.code === 'KeyR' || (typeof e.key === 'string' && e.key.toLowerCase() === 'r')
   }
 
   function startTrace(target) {
     const recorder = window.__changehereTrace
     if (!recorder || recorder.isRecording()) {
-      toast('轨迹录制器不可用', null, 'err')
+      toast('轨迹脚本未加载，请重新加载扩展后刷新此页面', null, 'err')
       return
     }
     deactivate()
@@ -160,7 +169,7 @@
   }
 
   function onTraceKey(e) {
-    if (e.key.toLowerCase() === 'r') {
+    if (isTraceKey(e)) {
       e.preventDefault()
       e.stopImmediatePropagation()
       stopTrace('manual')
@@ -232,6 +241,8 @@
       ' 截图　',
       el('span', 'ch-kbd', '↑↓'),
       ' 层级　',
+      el('span', 'ch-kbd', 'R'),
+      ' 录轨迹　',
       el('span', 'ch-kbd', 'Esc'),
       ' 退出'
     )
