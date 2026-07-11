@@ -99,6 +99,20 @@ claude mcp add changehere -- node /path/to/change-here/packages/changehere-mcp/s
 录制轨迹：进入选取模式，指向问题交互的起点元素后按 `R`；正常操作页面复现问题，
 再次按 `R` 停止（`Esc` 取消）。轨迹最多记录 100 条摘要，不采集输入值，只记录长度/状态。
 
+### CLI + agent skill
+
+不想加载 MCP 工具面时可以使用轻量 CLI：
+
+```bash
+changehere status
+changehere last
+changehere trace last
+changehere highlight src/App.jsx:9
+changehere install-skill .
+```
+
+`install-skill` 把随包分发的安全工作流安装到 `.agents/skills/changehere/SKILL.md`。
+
 bridge 监听 `127.0.0.1:5299`（`CHANGEHERE_PORT` 可改）；多个 agent 会话共享第一个实例（端口被占自动降级为客户端）。扩展侧在 server 未运行时静默降级（指数退避轮询），不影响剪贴板主流程。
 
 安全边界：网页/content script 不直接访问 bridge。扩展后台先用自身

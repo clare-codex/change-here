@@ -1,0 +1,21 @@
+{
+  "name": "changehere-cli",
+  "version": "0.1.0",
+  "description": "CLI and agent skill for the ChangeHere browser-to-source bridge",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "changehere": "bin.js"
+  },
+  "files": [
+    "bin.js",
+    "src",
+    "skills"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
