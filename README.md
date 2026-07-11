@@ -94,6 +94,10 @@ claude mcp add changehere -- node /path/to/change-here/packages/changehere-mcp/s
 
 - `get_selection`：拉取你最近点选的元素信息——点完元素直接对 agent 说"改我刚选的"
 - `highlight(file, line)`：agent 改完代码后主动高亮页面上的改动位置（本地 dev 页每 3s 轮询）
+- `get_trace`：读取最近一次最长 10 秒的交互轨迹（事件 + 按源码位置聚合的 DOM mutation + 运行时错误）
+
+录制轨迹：进入选取模式，指向问题交互的起点元素后按 `R`；正常操作页面复现问题，
+再次按 `R` 停止（`Esc` 取消）。轨迹最多记录 100 条摘要，不采集输入值，只记录长度/状态。
 
 bridge 监听 `127.0.0.1:5299`（`CHANGEHERE_PORT` 可改）；多个 agent 会话共享第一个实例（端口被占自动降级为客户端）。扩展侧在 server 未运行时静默降级（指数退避轮询），不影响剪贴板主流程。
 

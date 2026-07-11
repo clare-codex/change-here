@@ -15,6 +15,7 @@
   let locateBox = null
   let hits = []
   let childStack = [] // ↑ 选父级时记录来路，↓ 原路返回
+  let recordingTrace = false
 
   const CSS = `
 .ch-overlay{position:fixed;z-index:2147483646;pointer-events:none;display:none;
@@ -62,7 +63,10 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (!msg) return
-    if (msg.type === 'changehere:toggle') active ? deactivate() : activate()
+    if (msg.type === 'changehere:toggle') {
+      if (recordingTrace) stopTrace('manual')
+      else active ? deactivate() : activate()
+    }
     if (msg.type === 'changehere:locate') locateBox ? closeLocate() : openLocate()
   })
 
@@ -129,7 +133,62 @@
       e.preventDefault()
       e.stopImmediatePropagation()
       setCurrent(childStack.pop())
+    } else if (e.key.toLowerCase() === 'r' && current) {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      startTrace(current)
     }
+  }
+
+  function startTrace(target) {
+    const recorder = window.__changehereTrace
+    if (!recorder || recorder.isRecording()) {
+      toast('轨迹录制器不可用', null, 'err')
+      return
+    }
+    deactivate()
+    recordingTrace = true
+    document.addEventListener('keydown', onTraceKey, true)
+    const id = recorder.start({ target, onStop: finishTrace })
+    if (!id) {
+      recordingTrace = false
+      document.removeEventListener('keydown', onTraceKey, true)
+      toast('无法开始轨迹录制', null, 'err')
+      return
+    }
+    toast('正在录制交互轨迹（最长 10 秒）', 'R 停止 · Esc 取消')
+  }
+
+  function onTraceKey(e) {
+    if (e.key.toLowerCase() === 'r') {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      stopTrace('manual')
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      stopTrace('cancelled')
+    }
+  }
+
+  function stopTrace(reason) {
+    window.__changehereTrace?.stop(reason)
+  }
+
+  function finishTrace(trace) {
+    recordingTrace = false
+    document.removeEventListener('keydown', onTraceKey, true)
+    if (trace.stopReason === 'cancelled') {
+      toast('已取消轨迹录制')
+      return
+    }
+    try {
+      chrome.runtime.sendMessage(
+        { type: 'changehere:trace', payload: trace },
+        () => void chrome.runtime.lastError
+      )
+    } catch {}
+    toast(`已记录 ${trace.records.length} 条源码锚定轨迹`, null, 'ok')
   }
 
   function swallow(e) {

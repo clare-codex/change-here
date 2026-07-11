@@ -6,7 +6,7 @@ async function ensureAndSend(tab, type) {
     await chrome.tabs.sendMessage(tab.id, { type })
   } catch {
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] })
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['trace.js', 'content.js'] })
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['main.js'], world: 'MAIN' })
       await chrome.tabs.sendMessage(tab.id, { type })
     } catch {
@@ -57,6 +57,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'changehere:selection') {
     // 只有扩展后台能访问 bridge；网页/content script 不持有配对 token。
     bridgeFetch('/selection', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(msg.payload),
+    }).catch(() => {})
+  }
+  if (msg && msg.type === 'changehere:trace') {
+    bridgeFetch('/trace', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(msg.payload),

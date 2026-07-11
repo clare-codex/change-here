@@ -180,6 +180,42 @@ export function createBridgeServer(options = {}) {
       })
     }
 
+    if (req.method === 'POST' && path === '/trace') {
+      try {
+        const body = await readJsonBody(req)
+        if (!body || body.version !== 1 || typeof body.id !== 'string' || !Array.isArray(body.records)) {
+          return json(req, res, 400, { error: 'valid trace required' })
+        }
+        const trace = {
+          version: 1,
+          id: body.id.slice(0, 120),
+          url: String(body.url || '').slice(0, MAX_URL_LENGTH),
+          startedAt: String(body.startedAt || ''),
+          durationMs: Math.max(0, Math.min(10_000, Number(body.durationMs) || 0)),
+          stopReason: String(body.stopReason || 'unknown').slice(0, 40),
+          target: body.target ?? null,
+          records: body.records.slice(0, 100),
+          receivedAt: new Date().toISOString(),
+          provenance: {
+            channel: origin ? 'verified-extension' : 'local-process',
+            pageTrust: trustForUrl(body.url),
+          },
+        }
+        state.traces.unshift(trace)
+        state.traces.length = Math.min(state.traces.length, 10)
+        return json(req, res, 200, { ok: true, id: trace.id })
+      } catch (error) {
+        return json(req, res, error.statusCode || 400, { error: error.message })
+      }
+    }
+
+    if (req.method === 'GET' && path === '/trace') {
+      return json(req, res, 200, {
+        latest: state.traces[0] ?? null,
+        count: state.traces.length,
+      })
+    }
+
     if (req.method === 'POST' && path === '/highlight') {
       try {
         const body = await readJsonBody(req)

@@ -85,6 +85,29 @@ test('rejects oversized request bodies before parsing', async () => {
   assert.equal(response.status, 413)
 })
 
+test('stores only bounded versioned traces', async () => {
+  const trace = {
+    version: 1,
+    id: 'trace-test',
+    url: 'http://localhost:5173/trace-lab',
+    startedAt: new Date().toISOString(),
+    durationMs: 800,
+    stopReason: 'manual',
+    target: { tag: 'button', source: { file: 'src/App.jsx', line: 10, column: 3 } },
+    records: Array.from({ length: 120 }, (_, index) => ({ kind: 'event', type: 'click', atMs: index })),
+  }
+  const response = await fetch(base + '/trace', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(trace),
+  })
+  assert.equal(response.status, 200)
+  const stored = await (await fetch(base + '/trace')).json()
+  assert.equal(stored.latest.id, 'trace-test')
+  assert.equal(stored.latest.records.length, 100)
+  assert.equal(stored.latest.provenance.pageTrust, 'local-dev')
+})
+
 test('rejects DNS-rebinding Host headers', async () => {
   const status = await new Promise((resolve, reject) => {
     const request = http.request(base + '/status', {
