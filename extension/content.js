@@ -16,6 +16,7 @@
   let hits = []
   let childStack = [] // ↑ 选父级时记录来路，↓ 原路返回
   let recordingTrace = false
+  let intentBox = null
 
   const CSS = `
 .ch-overlay{position:fixed;z-index:2147483646;pointer-events:none;display:none;
@@ -56,6 +57,21 @@
   color:#e4e4e7;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none;}
 .ch-locate input:focus{border-color:#818cf8;}
 .ch-locate .ch-row2{margin-top:6px;}
+.ch-intent{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:2147483647;
+  background:rgba(24,24,37,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:10px 12px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);width:min(560px,88vw);animation:ch-pop .18s ease-out;}
+.ch-intent input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.12);border-radius:7px;padding:6px 9px;
+  color:#e4e4e7;font:12.5px/1.6 -apple-system,BlinkMacSystemFont,sans-serif;outline:none;}
+.ch-intent input:focus{border-color:#818cf8;}
+.ch-intent .ch-row2{margin-top:6px;white-space:normal;}
+.ch-chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+.ch-chip{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:999px;
+  padding:1px 10px;color:#b4b4bc;font:11px/1.7 -apple-system,BlinkMacSystemFont,sans-serif;
+  cursor:pointer;user-select:none;}
+.ch-chip:hover{border-color:rgba(255,255,255,.3);}
+.ch-chip.ch-on{background:rgba(129,140,248,.22);border-color:#818cf8;color:#c7d2fe;}
 .ch-hit{outline:2px solid #f472b6!important;outline-offset:2px;
   animation:ch-pulse 1.2s ease-in-out infinite;}
 @keyframes ch-pulse{0%,100%{outline-color:#f472b6}50%{outline-color:rgba(244,114,182,.2)}}
@@ -89,6 +105,7 @@
 
   function activate() {
     closeLocate()
+    closeIntentPanel()
     active = true
     ensureStyle()
     overlay = el('div', 'ch-overlay')
@@ -209,7 +226,7 @@
     const target = e.target
     if (!(target instanceof Element)) return
     // 自家 UI（toast/定位框等）不可被选取
-    if (target.closest('.ch-overlay,.ch-card,.ch-toast,.ch-locate')) return
+    if (target.closest('.ch-overlay,.ch-card,.ch-toast,.ch-locate,.ch-intent')) return
     if (target === current) return
     childStack = []
     setCurrent(target)
@@ -274,20 +291,129 @@
       })
       shotPromise = requestCapture(rect)
     }
-    const [fiber, shot] = await Promise.all([fiberInfo(target), shotPromise])
+    openIntentPanel(target, rect, shotPromise)
+  }
 
-    const md = buildMarkdown(target, rect, fiber, shot)
+  // ---------- 意图面板与上下文包 ----------
+
+  const INTENTS = ['general', 'style', 'interaction', 'data', 'performance', 'a11y']
+  const INTENT_LABELS = { general: '通用', style: '样式', interaction: '交互', data: '数据', performance: '性能', a11y: '无障碍' }
+  // 每类意图额外需要从 MAIN world fiber 取什么（默认只取 props）
+  const KINDS_BY_INTENT = { interaction: ['props', 'handlers'], data: ['props', 'state'] }
+
+  function openIntentPanel(target, rect, shotPromise) {
+    ensureStyle()
+    intentBox = el('div', 'ch-intent')
+    const input = el('input')
+    input.placeholder = '一句话描述需求（可留空），如：把这个按钮往右挪 / 点了没反应'
+    const chips = el('div', 'ch-chips')
+    const hint = el('div', 'ch-row2')
+    let selected = 'general'
+    const chipEls = new Map()
+
+    function refresh() {
+      for (const [key, chip] of chipEls) chip.classList.toggle('ch-on', key === selected)
+      hint.textContent = `→ ${INTENT_LABELS[selected]}包 · Tab 切类型 · Enter 采集复制 · Esc 取消`
+    }
+    for (const intent of INTENTS) {
+      const chip = el('span', 'ch-chip', INTENT_LABELS[intent])
+      chip.addEventListener('click', () => {
+        selected = intent
+        refresh()
+        input.focus()
+      })
+      chipEls.set(intent, chip)
+      chips.append(chip)
+    }
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Escape') {
+        closeIntentPanel()
+        toast('已取消')
+      } else if (e.key === 'Tab') {
+        e.preventDefault()
+        const step = e.shiftKey ? INTENTS.length - 1 : 1
+        selected = INTENTS[(INTENTS.indexOf(selected) + step) % INTENTS.length]
+        refresh()
+      } else if (e.key === 'Enter') {
+        const meta = { intent: selected, sentence: input.value.trim() }
+        closeIntentPanel()
+        finishSelection(target, rect, shotPromise, meta)
+      }
+    })
+    intentBox.append(input, chips, hint)
+    document.documentElement.append(intentBox)
+    refresh()
+    input.focus()
+  }
+
+  function closeIntentPanel() {
+    intentBox?.remove()
+    intentBox = null
+  }
+
+  async function finishSelection(target, rect, shotPromise, meta) {
+    const [fiber, shot, extras] = await Promise.all([
+      fiberInfo(target, KINDS_BY_INTENT[meta.intent]),
+      shotPromise,
+      collectExtras(meta.intent, target),
+    ])
+    const pack = buildPack(target, rect, fiber, shot, meta, extras)
+    const md = buildMarkdown(target, rect, fiber, shot, meta, extras, pack)
     copy(md).then(
-      () => toast('已复制元素信息' + (shot ? '（截图已存）' : ''), null, 'ok'),
+      () => toast(`已复制${INTENT_LABELS[meta.intent]}上下文包` + (shot ? '（截图已存）' : ''), null, 'ok'),
       () => toast('复制失败', null, 'err')
     )
     // 同步推给本地 MCP bridge（经 background，规避页面 CSP），没起 server 就静默丢弃
     try {
       chrome.runtime.sendMessage(
-        { type: 'changehere:selection', payload: { markdown: md, url: location.href } },
+        { type: 'changehere:selection', payload: { markdown: md, url: location.href, pack } },
         () => void chrome.runtime.lastError
       )
     } catch {}
+  }
+
+  // 专项采集失败不阻断主流程：降级为通用包并在 markdown 里注明
+  async function collectExtras(intent, target) {
+    const collect = window.__changehereCollect
+    if (!collect || intent === 'general') return null
+    try {
+      if (intent === 'style') return { style: collect.collectStyle(target) }
+      if (intent === 'interaction') return { interaction: collect.collectInteraction(target) }
+      if (intent === 'data') return { data: collect.collectData(target) }
+      if (intent === 'performance') return { performance: await collect.collectPerformance() }
+      if (intent === 'a11y') return { a11y: collect.collectA11y(target) }
+    } catch (error) {
+      return { collectError: String((error && error.message) || error) }
+    }
+    return null
+  }
+
+  function buildPack(target, rect, fiber, shot, meta, extras) {
+    const src = sourceOf(target)
+    const chain = chainOf(target)
+    const pack = {
+      packVersion: 1,
+      intent: meta.intent,
+      sentence: meta.sentence || null,
+      page: { url: location.href, viewport: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio } },
+      target: {
+        tag: target.tagName.toLowerCase(),
+        cssPath: cssPath(target),
+        text: (target.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120) || null,
+        rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
+        source: src,
+      },
+      verification: window.__changehereCollect?.verificationFor?.(meta.intent, src ? `${src.file}:${src.line}` : null) ?? [],
+    }
+    if (chain.length > 1) pack.target.chain = chain.map((c) => `${c.comp}@${c.file}:${c.line}`)
+    if (!src) pack.target.grepClues = grepClues(target)
+    if (fiber?.component) pack.component = { name: fiber.component, props: fiber.props ?? null }
+    if (fiber?.handlers) pack.handlers = fiber.handlers
+    if (fiber?.state) pack.state = fiber.state
+    if (extras) Object.assign(pack, extras)
+    if (shot) pack.screenshot = shot
+    return pack
   }
 
   // ---------- 数据采集 ----------
@@ -408,8 +534,9 @@
     return clues
   }
 
-  // 通过 MAIN world 的 main.js 读 React fiber（isolated world 读不到）
-  function fiberInfo(target) {
+  // 通过 MAIN world 的 main.js 读 React fiber（isolated world 读不到）。
+  // kinds 决定取什么：props / handlers / state；跨 world detail 只能传字符串。
+  function fiberInfo(target, kinds) {
     return new Promise((resolve) => {
       const timer = setTimeout(() => finish(null), 300)
       function finish(v) {
@@ -423,7 +550,7 @@
       }
       window.addEventListener('changehere:res', onRes)
       target.setAttribute('data-ch-picked', '')
-      window.dispatchEvent(new Event('changehere:req'))
+      window.dispatchEvent(new CustomEvent('changehere:req', { detail: JSON.stringify({ kinds: kinds || ['props'] }) }))
     })
   }
 
@@ -451,13 +578,14 @@
     })
   }
 
-  function buildMarkdown(target, rect, fiber, shot) {
+  function buildMarkdown(target, rect, fiber, shot, meta, extras, pack) {
     const src = sourceOf(target)
     const chain = chainOf(target)
     const text = (target.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120)
-    const styles = styleSnapshot(target)
+    const routed = meta.intent !== 'general'
 
-    const lines = ['## 前端元素修改请求', '']
+    const lines = [`## 前端元素修改请求${routed ? `（${INTENT_LABELS[meta.intent]}）` : ''}`, '']
+    if (meta.sentence) lines.push(`**需求**: ${meta.sentence}`)
     lines.push(`**页面**: ${location.href}`)
     if (src) {
       lines.push(`**源码位置**: ${src.file}:${src.line}:${src.col}${src.comp ? `（组件 <${src.comp}>）` : ''}`)
@@ -485,6 +613,8 @@
     lines.push(`**元素**: \`<${target.tagName.toLowerCase()}>\` \`${cssPath(target)}\``)
     if (text) lines.push(`**文本**: ${text}`)
     lines.push(`**尺寸**: ${Math.round(rect.width)}×${Math.round(rect.height)}`)
+    // 样式包里有更全的样式段，避免重复
+    const styles = extras?.style ? '' : styleSnapshot(target)
     if (styles) lines.push(`**当前样式**: \`${styles}\``)
     if (fiber && fiber.props) {
       let json = JSON.stringify(fiber.props, null, 2)
@@ -496,14 +626,196 @@
       )
     }
     if (shot) lines.push(`**截图**: ${shot}`)
-    lines.push('', '**修改意图**: （在此填写你想怎么改）')
+
+    if (routed) {
+      if (extras?.collectError) lines.push('', `⚠️ 专项上下文采集出错（已降级为通用包）: ${extras.collectError}`)
+      if (meta.intent === 'style' && extras?.style) renderStyleSection(lines, extras.style)
+      if (meta.intent === 'interaction') renderInteractionSection(lines, extras?.interaction, fiber)
+      if (meta.intent === 'data') renderDataSection(lines, extras?.data, fiber)
+      if (meta.intent === 'performance' && extras?.performance) renderPerformanceSection(lines, extras.performance)
+      if (meta.intent === 'a11y' && extras?.a11y) renderA11ySection(lines, extras.a11y)
+      if (pack.verification.length) {
+        lines.push('', '**验收建议**:')
+        pack.verification.forEach((rule, i) => lines.push(`${i + 1}. ${rule}`))
+      }
+    }
+    if (!meta.sentence) lines.push('', '**修改意图**: （在此填写你想怎么改）')
     return lines.join('\n')
+  }
+
+  // ---------- 意图段落渲染 ----------
+
+  function fmtStyles(obj) {
+    return Object.entries(obj || {}).map(([k, v]) => `${k}: ${v}`).join('; ')
+  }
+
+  function fmtSummary(s) {
+    if (!s) return ''
+    let sel = s.tag
+    if (s.id) sel += '#' + s.id
+    if (s.classes?.length) sel += '.' + s.classes.join('.')
+    let out = `\`<${sel}>\``
+    if (s.text) out += `「${s.text}」`
+    if (s.source) out += `（${s.source}）`
+    return out
+  }
+
+  function fmtRect(r) {
+    return r ? `${r.w}×${r.h} @(${r.x},${r.y})` : ''
+  }
+
+  function fmtBytes(n) {
+    return n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : (n / 1024).toFixed(1) + 'kB'
+  }
+
+  function fmtJson(value, cap = 2400) {
+    let json = JSON.stringify(value, null, 2)
+    if (json.length > cap) json = json.slice(0, cap) + '\n…'
+    return json
+  }
+
+  function renderStyleSection(lines, s) {
+    lines.push('', '### 样式上下文')
+    lines.push(`**盒模型**: \`${fmtStyles(s.box)}\``)
+    if (Object.keys(s.layout || {}).length) lines.push(`**布局**: \`${fmtStyles(s.layout)}\``)
+    if (Object.keys(s.typography || {}).length) lines.push(`**文字**: \`${fmtStyles(s.typography)}\``)
+    if (Object.keys(s.background || {}).length) lines.push(`**背景/效果**: \`${fmtStyles(s.background)}\``)
+    if (s.inlineStyle) lines.push(`**行内 style**: \`${s.inlineStyle}\``)
+    if (s.matchedRules?.length) {
+      const notes = []
+      if (s.rulesTruncated) notes.push(`已截断，另有 ${s.rulesTruncated} 条`)
+      if (s.opaqueSheets) notes.push(`${s.opaqueSheets} 个跨域样式表不可读`)
+      lines.push(`**命中的 CSS 规则**${notes.length ? `（${notes.join('；')}）` : ''}:`, '```css')
+      for (const r of s.matchedRules) {
+        lines.push(`/* ${r.from}${r.condition ? ` · ${r.condition}` : ''} */`)
+        lines.push(`${r.selector} { ${r.css} }`)
+      }
+      lines.push('```')
+    }
+    if (s.cssVariables) {
+      lines.push('**CSS 变量**: ' + Object.entries(s.cssVariables).map(([k, v]) => `\`${k}: ${v}\``).join(' '))
+    }
+    if (s.parent) {
+      lines.push(`**父容器**: ${fmtSummary(s.parent)} \`${fmtStyles(s.parent.layout)}\` · ${s.parent.childCount} 个子元素中第 ${s.parent.targetIndex + 1} 个 · ${fmtRect(s.parent.rect)}`)
+    }
+    if (s.siblings?.prev) lines.push(`**前一个兄弟**: ${fmtSummary(s.siblings.prev)} ${fmtRect(s.siblings.prev.rect)}`)
+    if (s.siblings?.next) lines.push(`**后一个兄弟**: ${fmtSummary(s.siblings.next)} ${fmtRect(s.siblings.next.rect)}`)
+    if (s.positionedAncestor) {
+      lines.push(`**定位祖先**: ${fmtSummary(s.positionedAncestor)} \`position: ${s.positionedAncestor.position}; z-index: ${s.positionedAncestor['z-index']}\``)
+    }
+    if (s.clippingAncestor) {
+      lines.push(`**裁剪祖先**: ${fmtSummary(s.clippingAncestor)} \`overflow: ${s.clippingAncestor.overflow}\``)
+    }
+  }
+
+  function renderInteractionSection(lines, x, fiber) {
+    lines.push('', '### 交互上下文')
+    if (fiber?.handlers?.length) {
+      lines.push('**React 事件处理器**（由内向外）:')
+      for (const g of fiber.handlers) lines.push(`- \`${g.owner}\`: ${g.handlers.join('，')}`)
+    } else {
+      lines.push('**React 事件处理器**: 未在 fiber 上发现 on* 回调（可能委托在更外层，或非 React 绑定）')
+    }
+    if (!x) return
+    if (x.blockers?.length) {
+      lines.push(`**阻断因素** ⚠️: ${x.blockers.join('；')}`)
+      if (x.coveredBy) {
+        lines.push(`- 被 ${fmtSummary(x.coveredBy)} 盖住（position: ${x.coveredBy.position}; z-index: ${x.coveredBy['z-index']}）`)
+      }
+    } else {
+      lines.push('**阻断因素**: 未发现 disabled / pointer-events:none / 遮挡')
+    }
+    lines.push(`**cursor**: ${x.cursor}${x.tabindex != null ? ` · tabindex=${x.tabindex}` : ''}`)
+    if (x.inlineHandlerAttrs) lines.push(`**行内事件属性**: ${x.inlineHandlerAttrs.join(', ')}`)
+    if (x.link) lines.push(`**所属链接**: ${x.link}`)
+    if (x.form) {
+      lines.push(`**所属表单**: ${fmtSummary(x.form)}${x.form.buttonType ? ` · 按钮 type=${x.form.buttonType}${x.form.buttonType === 'submit' ? '（默认触发表单提交，常见坑）' : ''}` : ''}`)
+    }
+    if (x.lastTrace) {
+      const t = x.lastTrace
+      lines.push(`**最近交互轨迹**: ${t.id}（${t.ageSeconds}s 前 · 事件 ${t.events} / 变更 ${t.mutations} / 错误 ${t.errors}${t.elementDiffFields.length ? ` · elementDiff: ${t.elementDiffFields.join(', ')}` : ''}），agent 可用 \`changehere trace last\` 读取`)
+    } else {
+      lines.push('**提示**: 行为类问题建议在选取模式下按 R 录制复现轨迹，agent 用 `changehere trace last` 读取')
+    }
+  }
+
+  function renderDataSection(lines, d, fiber) {
+    lines.push('', '### 数据上下文')
+    if (fiber?.state?.length) {
+      lines.push('**组件状态**（由内向外；hooks 是按声明顺序的现状值，effect/ref 已标注）:', '```json', fmtJson(fiber.state), '```')
+    } else {
+      lines.push('**组件状态**: 未能从 fiber 读到（非 React 元素或扩展未注入 MAIN world）')
+    }
+    if (!d) return
+    if (d.network?.requests?.length) {
+      lines.push(`**最近请求**（fetch/xhr 共 ${d.network.totalOnPage} 条，列最新 ${d.network.requests.length} 条）:`)
+      for (const r of d.network.requests) {
+        lines.push(`- ${r.status ? `[${r.status}] ` : ''}${r.url} · ${r.durationMs}ms · ${r.agoSeconds}s 前${r.bytes ? ` · ${fmtBytes(r.bytes)}` : ''}`)
+      }
+    } else {
+      lines.push('**最近请求**: 页面加载以来未捕获到 fetch/xhr（WebSocket 消息暂不采集）')
+    }
+    if (d.renderedList) {
+      lines.push(`**渲染列表现状**: ${fmtSummary(d.renderedList.container)} 共 ${d.renderedList.itemCount} 项，首「${d.renderedList.firstItem}」尾「${d.renderedList.lastItem}」`)
+    }
+    if (d.currentValue != null) lines.push(`**当前输入值**: 「${d.currentValue}」`)
+  }
+
+  function renderPerformanceSection(lines, p) {
+    lines.push('', '### 性能上下文（页面加载以来的缓冲观测）')
+    if (p.longTasks) {
+      lines.push(`**Long Tasks**: ${p.longTasks.count} 个 / 共 ${p.longTasks.totalMs}ms，最严重: ${p.longTasks.worst.map((w) => `${w.durationMs}ms @${(w.atMs / 1000).toFixed(1)}s`).join('，')}`)
+    } else {
+      lines.push('**Long Tasks**: 无（未出现 >50ms 的主线程任务）')
+    }
+    if (p.layoutShift) {
+      lines.push(`**Layout Shift**: 累计 CLS ${p.layoutShift.cls}（${p.layoutShift.count} 次）`)
+      for (const w of p.layoutShift.worst) {
+        lines.push(`- ${w.value} @${(w.atMs / 1000).toFixed(1)}s${w.sources.length ? ' ← ' + w.sources.map(fmtSummary).join(' ') : ''}`)
+      }
+    }
+    if (p.lcp) lines.push(`**LCP**: ${(p.lcp.atMs / 1000).toFixed(2)}s${p.lcp.element ? ' ← ' + fmtSummary(p.lcp.element) : ''}`)
+    if (p.fcpMs) lines.push(`**FCP**: ${(p.fcpMs / 1000).toFixed(2)}s`)
+    if (p.slowInteractions) {
+      lines.push('**慢交互**（>100ms）: ' + p.slowInteractions.map((s) => `${s.type} ${s.durationMs}ms${s.target ? ' ← ' + fmtSummary(s.target) : ''}`).join('；'))
+    }
+    if (p.navigation) {
+      lines.push(`**导航**: TTFB ${p.navigation.ttfbMs}ms · DOMContentLoaded ${p.navigation.domContentLoadedMs}ms · load ${p.navigation.loadMs}ms`)
+    }
+    if (p.memory) lines.push(`**内存**: JS 堆 ${p.memory.usedJsHeapMB}MB`)
+    if (p.resourceWaterfall) {
+      lines.push(`**请求瀑布**（最慢 ${p.resourceWaterfall.slowest.length} / 共 ${p.resourceWaterfall.total} 条，${fmtBytes(p.resourceWaterfall.totalBytes)}）:`)
+      for (const r of p.resourceWaterfall.slowest) {
+        lines.push(`- ${r.url} [${r.type}] ${r.durationMs}ms @${(r.startMs / 1000).toFixed(1)}s`)
+      }
+    }
+    if (p.notCollected) lines.push(`**未采集**: ${p.notCollected.join('；')}`)
+  }
+
+  function renderA11ySection(lines, a) {
+    lines.push('', '### 无障碍上下文')
+    lines.push(`**role**: ${a.role}${a.headingLevel ? `（h${a.headingLevel}）` : ''} · **名称**: 「${a.name}」${a.nameFrom ? `（来自 ${a.nameFrom}）` : ''}`)
+    if (a.states) lines.push('**状态**: ' + Object.entries(a.states).map(([k, v]) => `${k}=${v}`).join(', '))
+    const f = a.focus
+    lines.push(`**焦点**: ${f.inTabOrder ? `在 Tab 顺序第 ${f.position} 位` : '不在 Tab 顺序中'}${f.tabindex != null ? `（tabindex=${f.tabindex}）` : ''}`)
+    const fmtFocus = (n) => `\`<${n.tag}>\`「${n.name}」${n.source ? `（${n.source}）` : ''}`
+    if (f.prev?.length) lines.push('- 前序焦点: ' + f.prev.map(fmtFocus).join(' → '))
+    if (f.next?.length) lines.push('- 后续焦点: ' + f.next.map(fmtFocus).join(' → '))
+    if (a.contrast) {
+      lines.push(`**文本对比度**: ${a.contrast.ratio}:1（前景 ${a.contrast.color} / 背景 ${a.contrast.background}，AA 要求 ${a.contrast.required}:1）${a.contrast.pass ? '✓' : '✗ 不达标'}`)
+    }
+    if (a.landmark) lines.push(`**所属地标**: ${fmtSummary(a.landmark)}`)
+    if (a.warnings) {
+      lines.push('**警告**:')
+      for (const w of a.warnings) lines.push('- ⚠️ ' + w)
+    }
   }
 
   // ---------- 反向定位 ----------
 
   function openLocate() {
     if (active) deactivate()
+    closeIntentPanel()
     ensureStyle()
     locateBox = el('div', 'ch-locate')
     const input = el('input')

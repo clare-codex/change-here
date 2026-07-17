@@ -37,9 +37,27 @@ export default defineConfig({
 
 1. 打开本地 dev 页面（`http://localhost:*`）
 2. 点击工具栏「改这里」图标（或 `Alt+Shift+E`）进入选取模式
-3. 鼠标悬停高亮 + 显示 `<组件> 文件:行`，点击即复制、自动退出；`Esc` 取消
-4. **`↑` / `↓`** 沿 DOM 选父/子层级（悬停常选中太深的节点，如按钮里的 icon）
-5. **Alt+点击** 额外把元素截图存到 `下载目录/changehere/` 并在 markdown 里附路径（普通点击不截图、不触发下载）
+3. 鼠标悬停高亮 + 显示 `<组件> 文件:行`，点击后弹出**意图面板**；`Esc` 取消
+4. 面板里选任务类型（`Tab` 切换或点击 chips：通用/样式/交互/数据/性能/无障碍）、可选填一句需求，`Enter` 按类型采集并复制
+5. **`↑` / `↓`** 沿 DOM 选父/子层级（悬停常选中太深的节点，如按钮里的 icon）
+6. **Alt+点击** 额外把元素截图存到 `下载目录/changehere/` 并在 markdown 里附路径（普通点击不截图、不触发下载）
+
+### 意图路由 Context Pack
+
+不再一股脑发送全部上下文：按你选的任务类型采集对应的观测数据，剪贴板得到带专项段落的
+markdown，bridge/MCP 侧同步收到同构的结构化 JSON（`packVersion: 1`，含 `verification`
+验收建议）。选「通用」且不填需求时输出与 0.2 完全一致。
+
+| 类型 | 额外采集 |
+|------|---------|
+| 样式 | 盒模型、布局/文字/背景计算样式、命中的 CSS 规则与来源、CSS 变量、父容器布局与子序、相邻兄弟 rect、定位/裁剪祖先 |
+| 交互 | React fiber 上的 `on*` 处理器（沿组件链）、阻断诊断（disabled / pointer-events / 元素遮挡）、表单语境（button type=submit 坑）、最近一次交互轨迹摘要 |
+| 数据 | 组件 hooks/class state（由内向外 3 层现状值）、最近 fetch/xhr（URL/状态码/耗时，Resource Timing）、列表渲染现状（条数/首尾项）、输入框当前值 |
+| 性能 | Long Task、Layout Shift（含责任元素）、LCP/FCP、慢交互（Event Timing >100ms）、导航计时、JS 堆、请求瀑布 |
+| 无障碍 | 计算 role（显式/隐式）、accessible name 及来源、ARIA 状态、Tab 顺序位置与前后焦点、WCAG 对比度、地标、警告清单 |
+
+已知边界：事件监听器只能读 React fiber 上的（`getEventListeners` 是 DevTools 专属）；
+WebSocket 消息与 React 渲染次数需页面加载时预注入，本版未采集（markdown 中有注明）。
 
 > 截图走浏览器下载。如果 Chrome 开了「下载前询问每个文件的保存位置」，Alt+点击会弹另存为；想静默保存就在 `chrome://settings/downloads` 关掉该选项。
 
@@ -92,7 +110,7 @@ agent 改完代码后验收用：按 `Alt+Shift+L`，粘贴源码位置（`src/A
 claude mcp add changehere -- node /path/to/change-here/packages/changehere-mcp/server.js
 ```
 
-- `get_selection`：拉取你最近点选的元素信息——点完元素直接对 agent 说"改我刚选的"
+- `get_selection`：拉取你最近点选的元素信息（含意图、结构化 context pack 与验收建议）——点完元素直接对 agent 说"改我刚选的"
 - `highlight(file, line)`：agent 改完代码后主动高亮页面上的改动位置（本地 dev 页每 3s 轮询）
 - `get_trace`：读取最近一次最长 10 秒的交互轨迹（事件 + 按源码位置聚合的 DOM mutation + 运行时错误）
 - `highlight_trace_step(trace_id, step)`：把某条轨迹记录对应的源码锚元素指回页面

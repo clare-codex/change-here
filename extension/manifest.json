@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "改这里 ChangeHere",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "选取本地 React dev 页面元素，复制源码位置等结构化信息给 coding agent：指着页面说「改这里」",
   "icons": {
     "16": "icons/icon16.png",
@@ -23,7 +23,7 @@
   "content_scripts": [
     {
       "matches": ["http://localhost/*", "http://127.0.0.1/*"],
-      "js": ["trace.js", "content.js"],
+      "js": ["trace.js", "collect.js", "content.js"],
       "run_at": "document_idle"
     },
     {

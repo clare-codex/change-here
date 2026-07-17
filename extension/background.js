@@ -6,7 +6,7 @@ async function ensureAndSend(tab, type) {
     await chrome.tabs.sendMessage(tab.id, { type })
   } catch {
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['trace.js', 'content.js'] })
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['trace.js', 'collect.js', 'content.js'] })
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['main.js'], world: 'MAIN' })
       await chrome.tabs.sendMessage(tab.id, { type })
     } catch {

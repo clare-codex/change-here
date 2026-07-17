@@ -10,6 +10,7 @@
   const SNAPSHOT_ATTRIBUTES = ['class', 'hidden', 'disabled', 'open', 'checked', 'selected', 'aria-expanded', 'aria-pressed', 'aria-hidden', 'data-state']
   const SNAPSHOT_STYLES = ['display', 'position', 'visibility', 'opacity', 'width', 'height', 'transform', 'overflow']
   let session = null
+  let lastTrace = null
 
   function parseSource(value) {
     const match = /^(.*?)@(.*):(\d+):(\d+)$/.exec(value || '')
@@ -173,7 +174,7 @@
 
   function isOwnUi(node) {
     const element = elementOf(node)
-    return Boolean(element?.closest?.('.ch-overlay,.ch-card,.ch-toast,.ch-locate'))
+    return Boolean(element?.closest?.('.ch-overlay,.ch-card,.ch-toast,.ch-locate,.ch-intent'))
   }
 
   function isOwnUiMutation(mutation) {
@@ -319,6 +320,7 @@
       elementDiff: diffSnapshots(activeSession.elementBefore, elementAfter),
       records: activeSession.records,
     }
+    lastTrace = trace
     activeSession.onStop?.(trace)
     return trace
   }
@@ -326,6 +328,7 @@
   window.__changehereTrace = {
     start,
     stop,
+    getLast: () => lastTrace,
     isRecording: () => Boolean(session),
     limits: { maxDurationMs: MAX_DURATION_MS, maxRecords: MAX_RECORDS },
     internals: { diffSnapshots },

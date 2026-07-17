@@ -3,6 +3,7 @@ import http from 'node:http'
 
 export const MAX_BODY_BYTES = 64 * 1024
 const MAX_SELECTION_MARKDOWN = 20_000
+const MAX_PACK_BYTES = 32_000
 const MAX_URL_LENGTH = 2_048
 const EXTENSION_ORIGIN_RE = /^chrome-extension:\/\/[a-p]{32}$/
 const LOOPBACK_HOST_RE = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i
@@ -157,9 +158,17 @@ export function createBridgeServer(options = {}) {
           return json(req, res, 400, { error: 'markdown required' })
         }
         const url = String(body.url || '').slice(0, MAX_URL_LENGTH)
+        // 结构化上下文包（packVersion 1）：只透传对象，超限丢弃并注明
+        let pack = null
+        if (body.pack && typeof body.pack === 'object' && !Array.isArray(body.pack)) {
+          pack = JSON.stringify(body.pack).length <= MAX_PACK_BYTES
+            ? body.pack
+            : { dropped: `pack exceeded ${MAX_PACK_BYTES} bytes` }
+        }
         state.selections.unshift({
           markdown: body.markdown.slice(0, MAX_SELECTION_MARKDOWN),
           url,
+          pack,
           at: new Date().toISOString(),
           provenance: {
             channel: origin ? 'verified-extension' : 'local-process',

@@ -76,6 +76,42 @@ test('pairs an extension origin and requires its bearer token', async () => {
   })
 })
 
+test('stores structured context packs and drops oversized ones', async () => {
+  const pack = { packVersion: 1, intent: 'style', target: { tag: 'button' }, verification: ['rule'] }
+  const accepted = await fetch(base + '/selection', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ markdown: 'with pack', url: 'http://localhost:5173', pack }),
+  })
+  assert.equal(accepted.status, 200)
+  const stored = await (await fetch(base + '/selection')).json()
+  assert.deepEqual(stored.latest.pack, pack)
+
+  // 超过 32k 的 pack 丢弃并注明，不 500 也不透传
+  const oversized = await fetch(base + '/selection', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      markdown: 'oversized pack',
+      url: 'http://localhost:5173',
+      pack: { blob: 'x'.repeat(33_000) },
+    }),
+  })
+  assert.equal(oversized.status, 200)
+  const dropped = await (await fetch(base + '/selection')).json()
+  assert.equal(dropped.latest.markdown, 'oversized pack')
+  assert.match(dropped.latest.pack.dropped, /exceeded/)
+
+  // 非对象 pack 一律拒收为 null
+  await fetch(base + '/selection', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ markdown: 'array pack', url: 'http://localhost:5173', pack: [1, 2] }),
+  })
+  const arrayPack = await (await fetch(base + '/selection')).json()
+  assert.equal(arrayPack.latest.pack, null)
+})
+
 test('rejects oversized request bodies before parsing', async () => {
   const response = await fetch(base + '/selection', {
     method: 'POST',
